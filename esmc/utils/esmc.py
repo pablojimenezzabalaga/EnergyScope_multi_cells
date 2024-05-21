@@ -672,6 +672,10 @@ class Esmc:
                              'timelimit 172800',
                              'bardisplay=1',
                              'prestats=1',
+                             #'optimality=1e-9',  # Loosen optimality tolerance
+                             #'feasibility=1e-9',  # Loosen feasibility tolerance
+                             #'integrality=1e-8',  # Stricter integrality tolerance
+                             #'numericalemphasis=1',  # Emphasize numerical stability
                              'display=2']
             cplex_options_str = ' '.join(cplex_options)
             ampl_options = {'show_stats': 3,
@@ -897,7 +901,7 @@ class Esmc:
         gwp_breakdown.set_index(['Regions', 'Elements'], inplace=True)
 
         # put very small values as nan
-        treshold = 1e-2
+        treshold = 1e-5
         gwp_breakdown = gwp_breakdown.mask((gwp_breakdown > -treshold) & (gwp_breakdown < treshold), np.nan)
 
         # store into results
@@ -1124,9 +1128,9 @@ class Esmc:
         assets.sort_values(by=['Regions', 'Technologies'], axis=0, ignore_index=True, inplace=True)
         assets.set_index(['Regions', 'Technologies'], inplace=True)
         # put very small values as nan
-        treshold = 1e-2
+        treshold = 1e-5
         assets = assets.mask((assets > -treshold) & (assets < treshold), np.nan)
-        treshold = 1e-1
+        treshold = 1e-5
         assets['F_year'] = assets['F_year'].mask((assets['F_year'] > -treshold) & (assets['F_year'] < treshold), np.nan)
 
         # STORAGE ASSETS COMPUTATIONS
@@ -1257,7 +1261,7 @@ class Esmc:
         year_balance.set_index(['Regions', 'Elements'], inplace=True)
 
         # put very small values as nan
-        treshold = 1e-1
+        treshold = 1e-5
         year_balance = year_balance.mask((year_balance.min(axis=1) > -treshold) & (year_balance.max(axis=1) < treshold),
                                          np.nan)
 

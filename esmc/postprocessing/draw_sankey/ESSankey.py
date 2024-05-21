@@ -53,7 +53,11 @@ Usage: ESSankey.py [OPTIONS]
 \t\t\tprevent from automatically opening the generated html file in the browser.'''
 
 def drawSankey(path="./",outputfile='generated_sankey_Total.html', I2S_File="input2sankey_Total.csv", auto_open=True):
-    path = Path(path)
+    space_id="BN_BN-IT_BN-YC_CB_CH_LP_OR_PA-NA_PT_SC_SC-AS_SC-CC_SC-CQ_SC-GB_SC-MI_SC-VC_SC-VL_TJ_TJ-BE_TJ-EP_TJ-OC"
+    case_study="ref"
+    proj_dir = Path(__file__).parents[3]
+    path = proj_dir / "case_studies" / space_id / case_study / "outputs/regional_results/"
+    #path = Path(path)
     # if path.stem == "input2sankey":
     #     path = path.parent
     #     print("Warning: you should not include 'input2sankey.csv' in your path, but only the path of the directory containing this file.")

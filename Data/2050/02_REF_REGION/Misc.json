@@ -14,7 +14,7 @@
     "share_mobility_public_min": 0.199,
     "share_ned": {
         "AMMONIA": 0,
-        "HVC": 0,
+        "HVC": 1,
         "METHANOL": 0
     },
     "share_short_haul_flights_max": 0,

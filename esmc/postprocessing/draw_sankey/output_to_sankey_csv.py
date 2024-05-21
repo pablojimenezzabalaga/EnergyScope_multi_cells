@@ -47,12 +47,12 @@ class Cell:
 
     def update_year_balance(self):
         for sto in StorageLayer:
-            self.year_balance.loc[sto][StorageLayer[sto]] = -self.storage.loc[sto]["Year energy flux"]
+            self.year_balance.loc[sto, StorageLayer[sto]] = -self.storage.loc[sto, "Year energy flux"]
 
 
 def write_sankey_file(space_id, case_study):
     proj_dir = Path(__file__).parents[3]
-    output_dir = proj_dir / "case_studies" / space_id / case_study / "outputs"
+    output_dir = proj_dir / "case_studies" / space_id / case_study / "outputs/regional_results/"
 
     with open(output_dir / "Year_balance.csv", "r") as year_balance_file:
 
@@ -75,6 +75,12 @@ def write_sankey_file(space_id, case_study):
         # Get Sto_assets file under the form of a panda dataframe
         all_data_sto = pd.read_csv(sto_assets_file, index_col=[0, 1], sep=";")
         all_data_sto = all_data_sto.replace(to_replace=np.nan, value=0)
+    
+    # Read Curt.csv into a pandas dataframe and calculate the total sum of the Curt column for each unique value of the first column
+    curt_df = pd.read_csv(output_dir / "Curt.csv", delimiter=';')
+
+    curt_sum_by_region = curt_df.groupby(curt_df.columns[0])["Curt"].sum()
+    total_curt=curt_df["Curt"].sum()
 
     cells = {}
     for cell_name in cells_name:
@@ -90,6 +96,7 @@ def write_sankey_file(space_id, case_study):
 
     for cell in cells.values():
         file_name = "input2sankey_" + cell.name + ".csv"
+        total_elec_demand = 0
         with open(output_dir / file_name, "w") as input2csv_file:
             print("source,target,realValue,layerID,layerColor,layerUnit", file=input2csv_file)
 
@@ -97,7 +104,7 @@ def write_sankey_file(space_id, case_study):
                 tech_count = 0
                 for layer in cell.year_balance.columns:
                     value = cell.year_balance.loc[tech, layer]
-                    if value > 50 and tech != layer:
+                    if value > 5 and tech != layer:
                         if tech == "End Use":
                             continue
                         else:
@@ -116,7 +123,7 @@ def write_sankey_file(space_id, case_study):
             for layer in cell.year_balance.T.index:
                 for tech in cell.year_balance.T.columns:
                     value = cell.year_balance.T.loc[layer][tech]
-                    if value < -10:
+                    if value < -5:
                         if layer in EndUseLayer:
                             continue
                         elif tech != "End Use":
@@ -125,20 +132,73 @@ def write_sankey_file(space_id, case_study):
 
             for layer in EndUseName:
                 value = cell.year_balance.loc["End Use"][layer]
-                if value < -10:
+                if value < -5:
                     print("%s,%s,%f,%s,%s,%s" %
                           (layer, EndUseName[layer], -value / 1000, layer, LayerColor[layer], "TWh"),
                           file=input2csv_file)
 
+        # Read previously generated file to calculate total_elec_demand
+        with open(output_dir / file_name, "r") as previous_file:
+            for line in previous_file:
+                parts = line.strip().split(',')
+                if parts[0] == "Elec" and parts[1] == "Elec Demand":
+                    total_elec_demand += float(parts[2]) * 1000
+
+        # Write the total sum of Curt value for each region
+        with open(output_dir / file_name, "a") as input2csv_file:  # Open in append mode to continue writing
+            file_content = []
+            # Write the total sum of Curt value for each region
+            if cell.name in curt_sum_by_region.index:
+                curt_value = curt_sum_by_region[cell.name]
+                color = LayerColor["Elec"]
+                print("Elec,Curt.,%f,Curtailment,%s,TWh" % (curt_value / 1000, color), file=input2csv_file)
+                total_demand = total_elec_demand - curt_value
+        
+                # Close the write mode file handle
+                input2csv_file.close()
+
+                # Reopen the file in read mode
+                with open(output_dir / file_name, "r") as input2csv_file:
+                    # Iterate over lines in input2csv_file to modify Elec Demand line
+                    for line in input2csv_file:
+                        parts = line.strip().split(',')
+                        if parts[0] == "Elec" and parts[1] == "Elec Demand":
+                            line = "Elec,Elec Demand,%f,Elec Demand,%s,TWh\n" % (total_demand / 1000, color)
+                        file_content.append(line)
+
+                # Write the modified content back to input2csv_file
+                with open(output_dir / file_name, "w") as input2csv_file:
+                    input2csv_file.writelines(file_content)
+
+
+            elif cell.name == "Total":
+                print("Elec,Curt.,%f,Curtailment,%s,TWh" % (total_curt / 1000, color), file=input2csv_file)
+                total_demand = total_elec_demand - total_curt
+                
+                # Close the write mode file handle
+                input2csv_file.close()
+
+                # Reopen the file in read mode
+                with open(output_dir / file_name, "r") as input2csv_file:
+                    # Iterate over lines in input2csv_file to modify Elec Demand line
+                    for line in input2csv_file:
+                        parts = line.strip().split(',')
+                        if parts[0] == "Elec" and parts[1] == "Elec Demand":
+                            line = "Elec,Elec Demand,%f,Elec Demand,%s,TWh\n" % (total_demand / 1000, color)
+                        file_content.append(line)
+
+                # Write the modified content back to input2csv_file
+                with open(output_dir / file_name, "w") as input2csv_file:
+                    input2csv_file.writelines(file_content)
 
 RegroupElements = {
     "Nuclear": ["NUCLEAR"],
-    "CCGT": ["CCGT"],
+    "Gas Turbines": ["CCGT", "OCGT"],
     "CCGT_Ammonia": ["CCGT_AMMONIA"],
     "Coal_US": ["COAL_US"],
     "Coal_IGCC": ["COAL_IGCC"],
     "Solar PV": ["PV_ROOFTOP", "PV_UTILITY"],
-    "CSP": ["PT_POWER_BLOCK", "ST_POWER_BLOCK"],
+    "CSP Power Block": ["PT_POWER_BLOCK", "ST_POWER_BLOCK"],
     "Wind Onshore": ["WIND_ONSHORE"],
     "Wind Offshore": ["WIND_OFFSHORE"],
     "Hydro": ["HYDRO_DAM", "HYDRO_RIVER"],
@@ -147,10 +207,15 @@ RegroupElements = {
     "Tidal Power": ["TIDAL_STREAM", "TIDAL_RANGE"],
     "Wave": ["WAVE"],
     "Geothermal": ["GEOTHERMAL"],
+    "Diesel Genset": ["GENSET_DIESEL"],
+    "Biomass power plant": ["ST_BIOMASS", "ST_SNG", "FB_ST_BIOMASS", "CFB_ST_BIOMASS", "BFB_ST_BIOMASS"],
+    "Fuel cell": ["FUEL_CELL"],
+    "Biofuels": ["FERMENTATION_TO_BIOETHANOL", "ESTERIFICATION_TO_BIODIESEL"],
     "Ind Cogen": ["IND_COGEN_GAS", "IND_COGEN_WOOD", "IND_COGEN_WASTE"],
     "Ind Boiler": ["IND_BOILER_GAS", "IND_BOILER_WOOD", "IND_BOILER_BIOWASTE",
-                   "IND_BOILER_OIL", "IND_BOILER_COAL", "IND_BOILER_WASTE"],
+                   "IND_BOILER_OIL", "IND_BOILER_COAL", "IND_BOILER_WASTE", "IND_BOILER_DIESEL", "IND_BOILER_LPG"],
     "Ind Direct Elec": ["IND_DIRECT_ELEC"],
+    "Mechanical Energy": ["COMM_MACHINERY_DIESEL", "COMM_MACHINERY_EL", "IND_MACHINERY_EL", "TRACTOR_DIESEL", "TRACTOR_EL", "AGR_MACHINERY_DIESEL", "AGR_MACHINERY_EL", "MIN_MACHINERY_DIESEL", "MIN_MACHINERY_EL", "FISH_MACHINERY_DIESEL", "FISH_MACHINERY_EL"],
     "HPs": ["DHN_HP_ELEC", "DEC_HP_ELEC"],
     "DHN Tech": ["DHN_COGEN_GAS", "DHN_COGEN_WOOD", "DHN_COGEN_WASTE",
                  #"DHN_COGEN_WET_BIOMASS", "DHN_COGEN_BIO_HYDROLYSIS",
@@ -159,24 +224,26 @@ RegroupElements = {
     "DEC Heat": ["DEC_THHP_GAS", "DEC_COGEN_GAS", "DEC_COGEN_OIL", "DEC_ADVCOGEN_GAS",
                  "DEC_ADVCOGEN_H2", "DEC_BOILER_GAS", "DEC_BOILER_WOOD", "DEC_BOILER_OIL",
                  "DEC_SOLAR", "DEC_DIRECT_ELEC"],
-    "Cooling tech.": ["DEC_THHp_GAS_COLD", "DEC_ELEC_COLD", "IND_ELEC_COLD"],
+    "Stoves": ["STOVE_WOOD", "STOVE_LPG", "STOVE_NG", "STOVE_OIL", "STOVE_ELEC"],
+    "Lighting": ["CONVENTIONAL_BULB", "LED_BULB", "CONVENTIONAL_LIGHT", "LED_LIGHT"],
+    "Food preservation": ["REFRIGERATOR_EL"],
+    "Cooling": ["DEC_ELEC_COLD", "IND_ELEC_COLD"
+                     #"DEC_THHp_GAS_COLD", 
+                     ],
     # "Big Split":        ["BIG_SPLIT"],
     # "Chiller":          ["CHILLER_WC"],
 
-    "Mobility": ["TRAMWAY_TROLLEY", "BUS_COACH_DIESEL", "BUS_COACH_HYDIESEL",
-                 "BUS_COACH_CNG_STOICH", "BUS_COACH_FC_HYBRIDH2", "TRAIN_PUB",
+    #"Mobility": ["TRAMWAY_TROLLEY", "BUS_COACH_DIESEL", "BUS_COACH_HYDIESEL",
+                 #"BUS_COACH_CNG_STOICH", "BUS_COACH_FC_HYBRIDH2", "TRAIN_PUB",
                  #"PLANE_JETFUEL",
-                 "CAR_GASOLINE", "CAR_DIESEL", "CAR_NG",
-                 "CAR_METHANOL", "CAR_HEV", "CAR_PHEV", "CAR_BEV", "CAR_FUEL_CELL"],
-    # "Public Mob": ["TRAMWAY_TROLLEY", "BUS_COACH_DIESEL", "BUS_COACH_HYDIESEL",
-    #            "BUS_COACH_CNG_STOICH", "BUS_COACH_FC_HYBRIDH2", "TRAIN_PUB",
-    #           "PLANE_JETFUEL"],
-    # "Private Mob": ["CAR_GASOLINE", "CAR_DIESEL", "CAR_NG", "CAR_METHANOL",
-    #                     "CAR_HEV", "CAR_PHEV", "CAR_BEV", "CAR_FUEL_CELL"],
+                 #"CAR_GASOLINE", "CAR_DIESEL", "CAR_NG",
+                 #"CAR_METHANOL", "CAR_HEV", "CAR_PHEV", "CAR_BEV", "CAR_FUEL_CELL"],
+    "Public Mob": ["TRAMWAY_TROLLEY", "BUS_COACH_DIESEL", "BUS_COACH_HYDIESEL", "BUS_COACH_CNG_STOICH", "BUS_COACH_FC_HYBRIDH2", "TRAIN_PUB", "CAR_FG_PUBLIC", "BUS_FG_PUBLIC", "PICKUP_TRUCK_FG_PUBLIC", "SUV_FG_PUBLIC", "MOTORCYCLE_FG_PUBLIC", "CAR_GASOLINE_PUBLIC", "BUS_GASOLINE_PUBLIC", "PICKUP_TRUCK_GASOLINE_PUBLIC", "SUV_GASOLINE_PUBLIC", "MOTORCYCLE_GASOLINE_PUBLIC", "CAR_DIESEL_PUBLIC", "BUS_DIESEL_PUBLIC", "PICKUP_TRUCK_DIESEL_PUBLIC", "SUV_DIESEL_PUBLIC", "MOTORCYCLE_DIESEL_PUBLIC", "BUS_ELEC_PUBLIC", "PICKUP_TRUCK_ELEC_PUBLIC", "SUV_ELEC_PUBLIC", "MOTORCYCLE_ELEC_PUBLIC"],
+    "Private Mob": ["CAR_GASOLINE", "CAR_DIESEL", "CAR_NG", "CAR_METHANOL", "CAR_HEV", "CAR_PHEV", "CAR_BEV", "CAR_FUEL_CELL", "CAR_FG_PRIVATE", "BUS_FG_PRIVATE", "PICKUP_TRUCK_FG_PRIVATE", "SUV_FG_PRIVATE", "MOTORCYCLE_FG_PRIVATE", "CAR_GASOLINE_PRIVATE", "BUS_GASOLINE_PRIVATE", "PICKUP_TRUCK_GASOLINE_PRIVATE", "SUV_GASOLINE_PRIVATE", "MOTORCYCLE_GASOLINE_PRIVATE", "CAR_DIESEL_PRIVATE", "BUS_DIESEL_PRIVATE", "PICKUP_TRUCK_DIESEL_PRIVATE", "SUV_DIESEL_PRIVATE", "MOTORCYCLE_DIESEL_PRIVATE", "BUS_ELEC_PRIVATE", "PICKUP_TRUCK_ELEC_PRIVATE", "SUV_ELEC_PRIVATE", "MOTORCYCLE_ELEC_PRIVATE"],
 
-    "Freight": ["TRAIN_FREIGHT", "BOAT_FREIGHT_DIESEL", "BOAT_FREIGHT_NG",
-                "BOAT_FREIGHT_METHANOL", "TRUCK_DIESEL", "TRUCK_METHANOL",
-                "TRUCK_FUEL_CELL", "TRUCK_ELEC", "TRUCK_NG"],
+    "Freight": ["TRAIN_FREIGHT", "TRAIN_FREIGHT_ELEC", "BOAT_FREIGHT_DIESEL", "BOAT_FREIGHT_NG",
+                "BOAT_FREIGHT_METHANOL", "BOAT_FREIGHT_ELEC", "TRUCK_DIESEL", "TRUCK_FUEL_CELL",
+                "TRUCK_NG", "TRUCK_METHANOL", "TRUCK_ELEC", "TRUCK_FG", "VAN_FG", "CARGO_MOTORCYCLE_FG", "TRUCK_GASOLINE", "VAN_GASOLINE", "CARGO_MOTORCYCLE_GASOLINE", "TRUCK_DIESEL_P", "VAN_DIESEL", "CARGO_MOTORCYCLE_DIESEL", "VAN_ELEC", "CARGO_MOTORCYCLE_ELEC", "PLANE"],
     # "Rail Freight":    ["TRAIN_FREIGHT"],
     # "Boat Freight":     ["BOAT_FREIGHT_DIESEL", "BOAT_FREIGHT_NG", "BOAT_FREIGHT_METHANOL"],
     # "Road Freight":     ["TRUCK_DIESEL", "TRUCK_METHANOL", "TRUCK_FUEL_CELL",
@@ -185,26 +252,27 @@ RegroupElements = {
     #                  "CONTAINER_CARGO_METHANOL", "CONTAINER_CARGO_AMMONIA",
     #                  "CONTAINER_CARGO_FUELCELL_AMMONIA", "CONTAINER_CARGO_RETRO_METHANOL",
     #                  "CONTAINER_CARGO_RETRO_AMMONIA", "CONTAINER_CARGO_FUELCELL_LH2"],
-    "Solar": ["PT_COLLECTOR", "ST_COLLECTOR"],
+    "CSP collector": ["PT_COLLECTOR", "ST_COLLECTOR"],
     "H2.": ["H2_ELECTROLYSIS", "H2_NG", "H2_BIOMASS", "AMMONIA_TO_H2"],
     "Gasifi SNG": ["GASIFICATION_SNG"],
     "To Methane": ["SYN_METHANATION", "BIOMETHANATION_WET_BIOMASS", "BIOMETHANATION_BIOWASTE"],
-    "Pyrolise": ["PYROLYSIS_LIGNO_TO_LFO", "PYROLYSIS_LIGNO_TO_FUELS",
-                 "PYROLYSIS_BIOWASTE_TO_LFO", "PYROLYSIS_BIOWASTE_TO_FUELS"],
+    "Pyrolise": ["PYROLYSIS_BIOWASTE_TO_FUELS"
+                 #"PYROLYSIS_LIGNO_TO_LFO", "PYROLYSIS_LIGNO_TO_FUELS", "PYROLYSIS_BIOWASTE_TO_LFO"
+                 ],
     "To Methanol": ["SYN_METHANOLATION", "METHANE_TO_METHANOL", "BIOMASS_TO_METHANOL"],
     "Haber Bosch": ["HABER_BOSCH"],
     #"Fischer-Tropsch": ["FISCHER_TROPSCH_DIESEL", "FISCHER_TROPSCH_GASOLINE", "FISCHER_TROPSCH_JETFUEL"],
-    "HVC": ["OIL_TO_HVC", "GAS_TO_HVC", "BIOMASS_TO_HVC", "METHANOL_TO_HVC"],
-    "Elec in/out": ["ELECTRICITY"],
-    "Oil imports": ["GASOLINE"],
+    "Non-Energy Demand": ["OIL_TO_HVC", "GAS_TO_HVC", "BIOMASS_TO_HVC", "METHANOL_TO_HVC"],
+    #"Elec in/out": ["ELECTRICITY"],
+    "Prod. & Imp. Gasoline": ["GASOLINE"],
     #"Oil RE imports": ["GASOLINE_RE"],
     #"Jet Fuel imports": ["JET_FUEL"],
     #"Jet Fuel RE imports": ["JET_FUEL_RE"],
-    "Diesel imports": ["DIESEL"],
+    "Prod. & Imp. Diesel": ["DIESEL"],
     "Bioethanol imports": ["BIOETHANOL"],
     "Biodiesel imports": ["BIODIESEL"],
-    "LFO imports": ["LFO"],
-    "Gas imports": ["GAS"],
+    "LFO": ["LFO"],
+    "Fossil Gas": ["GAS"],
     "Gas RE imports": ["GAS_RE"],
     "Ligno. biomass": ["WOOD", "ENERGY_CROPS_2"],
     "Biowaste": ["BIOWASTE", "BIOMASS_RESIDUES"],
@@ -228,36 +296,46 @@ RegroupElements = {
 
 # Names of the layers.
 RegroupLayers = {
-    "Elec.": ["ELECTRICITY"],
-    "Oil": ["GASOLINE"],
-    #"Jet Fuel": ["JET_FUEL"],
+    "Elec": ["ELECTRICITY"],
+    "Gasoline": ["GASOLINE"],
+    "Jet Fuel": ["JET_FUEL"],
     "Diesel": ["DIESEL"],
+    "LPG": ["LPG"],
     "LFO": ["LFO"],
-    "Gas": ["GAS"],
-    "Ligno. biomass": ["WOOD", "ENERGY_CROPS_2"],
-    "Biowaste": ["BIOWASTE", "BIOMASS_RESIDUES"],
+    "Fossil Gas": ["GAS"],
+    "Ligno. biomass": ["WOOD", 
+                      #"ENERGY_CROPS_2"
+                      ],
+    "Biowaste": ["BIOWASTE", 
+                #"BIOMASS_RESIDUES"
+                ],
     "Wet biomass": ["WET_BIOMASS"],
     "Coal": ["COAL"],
     "Waste": ["WASTE"],
     "H2.": ["H2"],
     "Ammonia": ["AMMONIA"],
     "Methanol": ["METHANOL"],
-    "HVC": ["HVC"],
+    "Non-Energy Demand": ["HVC"],
     "Heat HT": ["HEAT_HIGH_T"],
     "Heat LT DHN": ["HEAT_LOW_T_DHN"],
-    "Heat LT DEC": ["HEAT_LOW_T_DECEN"],
+    "Heat LT": ["HEAT_LOW_T_DECEN"],
     "Cooling": ["SPACE_COOLING", "PROCESS_COOLING"],
     # "Space Cool": ["SPACE_COOLING"],
     # "Process Cool": ["PROCESS_COOLING"],
-    "Mobility": ["MOB_PUBLIC", "MOB_PRIVATE"],
-    # "Public Mob": ["MOB_PUBLIC"],
-    # "Private Mob": ["MOB_PRIVATE"],
+    # "Mobility": ["MOB_PUBLIC", "MOB_PRIVATE"],
+    "Public Mob": ["MOB_PUBLIC"],
+    "Private Mob": ["MOB_PRIVATE"],
     "Freight": ["MOB_FREIGHT_RAIL", "MOB_FREIGHT_ROAD", "MOB_FREIGHT_BOAT"],
+    "Lighting": ["LIGHTING_R_C", "LIGHTING_P"],
+    "Cooking": ["COOKING"],
+    "Food preservation": ["FOOD_PRESERVATION"],
+    "Mechanical Energy": ["MECHANICAL_ENERGY_COMM", "MECHANICAL_ENERGY_IND", "MECHANICAL_ENERGY_MOV_AGR", "MECHANICAL_ENERGY_FIX_AGR", "MECHANICAL_ENERGY_MIN", "MECHANICAL_ENERGY_FISH_OTHERS"],
     # "Rail Freight": ["MOB_FREIGHT_RAIL"],
     # "Road Freight": ["MOB_FREIGHT_ROAD"],
     # "Boat Freight": ["MOB_FREIGHT_BOAT"],
     #"Int. Freight": ["CONTAINER_FREIGHT"],
-    "Solar": ["PT_HEAT", "ST_HEAT"]
+    "CSP": ["PT_HEAT", "ST_HEAT"],
+    "Solar": ["RES_SOLAR"]
 }
 
 # Link the tech with the layer name (as in LayerColor) of its output. If several
@@ -266,7 +344,7 @@ RegroupLayers = {
 
 
 TechLayer = {
-    "Solar": "RES Solar",
+    "Solar PV": "RES Solar",
     "Wind Onshore": "RES Wind",
     "Wind Offshore": "RES Wind",
     "Hydro": "RES Hydro",
@@ -275,6 +353,9 @@ TechLayer = {
     "Tidal Power": "RES Hydro",
     "Wave": "RES Hydro",
     "Geothermal": "Geothermal",
+    "Gas Turbines": "Fossil Gas",
+    "Diesel Genset": "Diesel",
+    "Biomass power plant": "Biowaste",
     "Nuclear": "Uranium"
 }
 
@@ -305,14 +386,16 @@ StorageLayer = {
 
 EndUseLayer = [
     "Heat LT DHN",
-    "Heat LT DEC",
+    "Heat LT",
     "Cooling",
     # "Space Cool",
     # "Process Cool",
-    "Mobility",
+    #"Mobility",
     "Freight",
-    # "Public Mob",
-    # "Private Mob",
+    "Public Mob",
+    "Private Mob",
+    "Mech. Energy",
+    "Lighting"
     # "Road Freight",
     # "Boat Freight",
     # "Rail Freight",
@@ -323,17 +406,18 @@ EndUseName = {
     "Elec": "Elec Demand",
     "Ammonia": "Non-Energy Demand",
     "Methanol": "Non-Energy Demand",
-    "HVC": "Non-Energy Demand",
-    "Heat HT": "Ind Heat Demand",
+    #"HVC": "Non-Energy Demand",
+    #"Heat HT": "Ind Heat Demand",
 }
 
 LayerColor = {
     "Elec": "#00BFFF",
-    "Oil": "#8B008B",
-    #"Jet Fuel": "#CDC0B0",
+    "Gasoline": "#808080",
+    "Jet Fuel": "#deb887",
     "Diesel": "#D3D3D3",
     "LFO": "#8B008B",
-    "Gas": "#FFD700",
+    "LPG": "#da70d6",
+    "Fossil Gas": "#FFD700",
     "Ligno. biomass": "#CD853F",
     "Biowaste": "#3F5901",
     "Wet biomass": "#336600",
@@ -343,17 +427,22 @@ LayerColor = {
     "H2.": "#FF00FF",
     "Ammonia": "#000ECD",
     "Methanol": "#CC0066",
-    "HVC": "#00FFFF",
+    "Non-Energy Demand": "#00FFFF",
+    # "HVC": "#00FFFF",
     "Heat HT": "#DC143C",
     "Heat LT DHN": "#FA8072",
-    "Heat LT DEC": "#FA8072",
+    "Heat LT": "#6a5acd",
     "Cooling": "#00CED1",
+    "Cooking": "#00CED1",
+    "Lighting": "#00CED1",
+    "Mech. Energy": "#00CED1",
     # "Space Cool": "#00CED1",
     # "Process Cool": "#00CED1",
     "RES Wind": "#27AE34",
-    "RES Solar": "#FFFF00",
+    "RES Solar": "#FF7F50",
     "RES Hydro": "#00CED1",
     "RES Geo": "#FF0000",
-    "Solar": "#FFFF00",
+    "Solar": "#FF7F50",
+    "CSP": "#FF7F50",
     "Geothermal": "#FF0000"
 }

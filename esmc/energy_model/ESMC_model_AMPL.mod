@@ -74,6 +74,15 @@ set EXCHANGE_NETWORK_R within RESOURCES; # Resources that are exchanged through 
 set EXCHANGE_R := EXCHANGE_FREIGHT_R union EXCHANGE_NETWORK_R; # set of all exchanged resources
 set NETWORK_TYPE {EXCHANGE_NETWORK_R} within TECHNOLOGIES; # different types of network inteconnecting the regions
 #set GAS_NETWORK within NETWORK_TYPE; # gas network types that can be retrofitted to hydrogen network
+# Define the group of regions
+set GROUPED_REGIONS := {'BN', 'CB', 'CH', 'LP', 'OR', 'PA-NA', 'PT', 'SC', 'TJ'};
+
+# Define a set that captures the relationships between GROUPED_REGIONS and related non-grouped regions
+set RELATED_PAIRS within {GROUPED_REGIONS, REGIONS} = {
+    ('BN', 'BN-IT'), ('BN', 'BN-YC'),
+    ('SC', 'SC-AS'), ('SC', 'SC-CC'), ('SC', 'SC-CQ'), ('SC', 'SC-GB'), ('SC', 'SC-MI'), ('SC', 'SC-VC'), ('SC', 'SC-VL'),
+    ('TJ', 'TJ-BE'), ('TJ', 'TJ-EP'), ('TJ', 'TJ-OC')
+};
 
 #################################
 ### PARAMETERS [Tables 1-2]   ###
@@ -239,7 +248,10 @@ var R_t_export{REGIONS, RESOURCES, HOURS, TYPICAL_DAYS} >= 0; # Export of resour
 var Exch_freight_border{REGIONS, REGIONS} >= 0; # yearly additional freight due to exchanges accross each border
 var Exch_freight{REGIONS} >= 0; # yearly additional freight due to exchanges for each region
 var Import_constant {REGIONS, RES_IMPORT_CONSTANT} >= 0; # variable to fix the imports of certain resources as constant over the year
-
+var Exch_network_imp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, h in HOURS, td in TYPICAL_DAYS} >= 0 default 0;
+var Exch_network_exp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, h in HOURS, td in TYPICAL_DAYS} >= 0 default 0;
+var Exch_extra_freight_imp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS} >= 0 default 0;
+var Exch_extra_freight_exp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS} >= 0 default 0;
 
 #########################################
 ###      CONSTRAINTS Eqs [1-42]       ###
@@ -253,6 +265,10 @@ subject to end_uses_t {c in REGIONS, l in LAYERS, h in HOURS, td in TYPICAL_DAYS
 	End_uses [c, l, h, td] = (if l == "ELECTRICITY"
 		then
 			(end_uses_input[c,l] * electricity_time_series [c, h, td] / t_op [h, td] ) + Network_losses [c,l,h,td]
+		else (if l == "LIGHTING_R_C" then
+			(end_uses_input[c,"LIGHTING_R_C"] * electricity_time_series [c, h, td] / t_op [h, td])
+		else (if l == "LIGHTING_P" then
+			(end_uses_input[c,"LIGHTING_P"] * electricity_time_series [c, h, td] / t_op [h, td])
 		else (if l == "HEAT_LOW_T_DHN" then
 			(end_uses_input[c,"HEAT_LOW_T_HW"] / total_time + end_uses_input[c,"HEAT_LOW_T_SH"] * heating_time_series [c, h, td] / t_op [h, td] ) * Share_heat_dhn[c] + Network_losses [c,l,h,td]
 		else (if l == "HEAT_LOW_T_DECEN" then
@@ -268,17 +284,34 @@ subject to end_uses_t {c in REGIONS, l in LAYERS, h in HOURS, td in TYPICAL_DAYS
 		else (if l == "MOB_FREIGHT_RAIL" then
 			(end_uses_input[c,"MOBILITY_FREIGHT"]   * mob_freight_time_series [c, h, td] / t_op [h, td] ) *  Share_freight_train[c]
 		else (if l == "MOB_FREIGHT_ROAD" then
-			((end_uses_input[c,"MOBILITY_FREIGHT"]   * mob_freight_time_series [c, h, td] / t_op [h, td] ) *  Share_freight_road[c] + Exch_freight [c] / total_time)
+			#((end_uses_input[c,"MOBILITY_FREIGHT"]   * mob_freight_time_series [c, h, td] / t_op [h, td] ) *  Share_freight_road[c] + Exch_freight [c] / total_time)
+			((end_uses_input[c,"MOBILITY_FREIGHT"]   * mob_freight_time_series [c, h, td] / t_op [h, td] ) *  Share_freight_road[c])
 		else (if l == "MOB_FREIGHT_BOAT" then
 			(end_uses_input[c,"MOBILITY_FREIGHT"]   * mob_freight_time_series [c, h, td] / t_op [h, td] ) *  Share_freight_boat[c]
 		else (if l == "SHIPPING" then
 			end_uses_input[c,l] / total_time
 		else (if l == "HEAT_HIGH_T" then
 			end_uses_input[c,l] / total_time
+		else (if l == "FOOD_PRESERVATION" then
+			end_uses_input[c,l] / total_time
+		else (if l == "COOKING" then
+			end_uses_input[c,l] / total_time
 		else (if l == "SPACE_COOLING" then
 			end_uses_input[c,l] * cooling_time_series [c, h, td] / t_op [h, td]
 		else (if l == "PROCESS_COOLING" then
 			end_uses_input[c,l] / total_time
+		else (if l == "MECHANICAL_ENERGY_COMM" then
+			end_uses_input[c,l] / total_time
+		else (if l == "MECHANICAL_ENERGY_IND" then
+			end_uses_input[c,l] / total_time
+		else (if l == "MECHANICAL_ENERGY_MOV_AGR" then
+			end_uses_input[c,l] / total_time
+		else (if l == "MECHANICAL_ENERGY_FIX_AGR" then
+			end_uses_input[c,l] / total_time
+		else (if l == "MECHANICAL_ENERGY_MIN" then
+			end_uses_input[c,l] / total_time
+		else (if l == "MECHANICAL_ENERGY_FISH_OTHERS" then
+			end_uses_input[c,l] / total_time			
 		else (if l == "HVC" then
 			end_uses_input[c,"NON_ENERGY"] * share_ned [c, "HVC"] / total_time
 		else (if l == "AMMONIA" then
@@ -286,7 +319,7 @@ subject to end_uses_t {c in REGIONS, l in LAYERS, h in HOURS, td in TYPICAL_DAYS
 		else (if l == "METHANOL" then
 			end_uses_input[c, "NON_ENERGY"] * share_ned [c, "METHANOL"] / total_time
 		else 
-			0 ))))))))))))))))); # For all layers which don't have an end-use demand
+			0 ))))))))))))))))))))))))))); # For all layers which don't have an end-use demand
 
 
 ## Cost
@@ -325,9 +358,8 @@ subject to gwp_op_calc {c in REGIONS, i in RESOURCES}:
 
 # Direct emissions of the fuels, to match GWP historical data
 subject to co2_net_calc {c in REGIONS, i in RESOURCES}:
-	CO2_net [c,i] = sum {t in PERIODS, h in HOUR_OF_PERIOD [t], td in TYPICAL_DAY_OF_PERIOD [t]} (R_t_local [c, i, h, td] * co2_net [i] * t_op [h, td] + R_t_exterior [c, i, h, td] * co2_net [i] * t_op [h, td] );	
+	CO2_net [c,i] = sum {t in PERIODS, h in HOUR_OF_PERIOD [t], td in TYPICAL_DAY_OF_PERIOD [t]} (R_t_local [c, i, h, td] * co2_net [i] * t_op [h, td] + R_t_exterior [c, i, h, td] * co2_net [i] * t_op [h, td] );
 
-	
 ## Multiplication factor
 #-----------------------
 	
@@ -341,8 +373,30 @@ subject to capacity_factor_t {c in REGIONS, j in TECHNOLOGIES, h in HOURS, td in
 	
 # [Eq. 11] relation between mult_t and mult via yearly capacity factor. This one forces total annual output
 subject to capacity_factor {c in REGIONS, j in TECHNOLOGIES}:
-	sum {t in PERIODS, h in HOUR_OF_PERIOD [t], td in TYPICAL_DAY_OF_PERIOD [t]} (F_t [c, j, h, td] * t_op [h, td]) <= F [c, j] * c_p [c, j] * total_time;	
-		
+	sum {t in PERIODS, h in HOUR_OF_PERIOD [t], td in TYPICAL_DAY_OF_PERIOD [t]} (F_t [c, j, h, td] * t_op [h, td]) <= F [c, j] * c_p [c, j] * total_time;
+
+# Constraint for the specific case
+#subject to capacity_factor_TJ_CCGT_lower:
+#    (F["TJ", "CCGT"] * c_p["TJ", "CCGT"] * total_time) - 500 <= sum {t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]} (F_t["TJ", "CCGT", h, td] * t_op[h, td]);
+
+#subject to capacity_factor_TJ_CCGT_upper:
+#    sum {t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]} (F_t["TJ", "CCGT", h, td] * t_op[h, td]) <= F["TJ", "CCGT"] * c_p["TJ", "CCGT"] * total_time;
+
+# Constraint for all other cases
+#subject to capacity_factor_others {c in REGIONS, j in TECHNOLOGIES: !(c == "TJ" and j == "CCGT")}:
+#    sum {t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]} (F_t[c, j, h, td] * t_op[h, td]) <= F[c, j] * c_p[c, j] * total_time;
+
+# Constraint for the specific case
+#subject to capacity_factor_elec_lower {c in REGIONS, j in TECHNOLOGIES_OF_END_USES_TYPE["ELECTRICITY"]}:
+#    (F[c, j] * c_p[c, j] * total_time) - 700 <= sum {t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]} (F_t[c, j, h, td] * t_op[h, td]);
+
+#subject to capacity_factor_elec_upper {c in REGIONS, j in TECHNOLOGIES_OF_END_USES_TYPE["ELECTRICITY"]}:
+#    sum {t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]} (F_t[c, j, h, td] * t_op[h, td]) <= F[c, j] * c_p[c, j] * total_time;
+
+# Constraint for all other cases
+#subject to capacity_factor_others {c in REGIONS, j in TECHNOLOGIES diff TECHNOLOGIES_OF_END_USES_TYPE["ELECTRICITY"]}:
+#    sum {t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]} (F_t[c, j, h, td] * t_op[h, td]) <= F[c, j] * c_p[c, j] * total_time;
+
 ## Resources
 #-----------
 
@@ -428,17 +482,28 @@ subject to resources_no_exchanges {c1 in REGIONS, n in NOEXCHANGES, h in HOURS, 
 subject to resources_no_exchanges2 {c1 in REGIONS, n in NOEXCHANGES, h in HOURS, td in TYPICAL_DAYS} :
 	R_t_export [c1, n, h, td] = 0;
 
+# resources network and freight
+subject to exch_imp_def {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_R, h in HOURS, td in TYPICAL_DAYS} :
+    Exch_imp[c1,c2,i,h,td] =
+        (if i in EXCHANGE_NETWORK_R then Exch_network_imp[c1,c2,i,h,td] else 0)
+      + (if i in EXCHANGE_FREIGHT_R then Exch_extra_freight_imp[c1,c2,i,h,td] else 0);
+
+subject to exch_exp_def {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_R, h in HOURS, td in TYPICAL_DAYS} :
+    Exch_exp[c1,c2,i,h,td] =
+        (if i in EXCHANGE_NETWORK_R then Exch_network_exp[c1,c2,i,h,td] else 0)
+      + (if i in EXCHANGE_FREIGHT_R then Exch_extra_freight_exp[c1,c2,i,h,td] else 0);
+
 ## Network exchanges
-subject to capacity_limit_imp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, h in HOURS, td in TYPICAL_DAYS} :
-	Exch_imp[c1,c2,i,h,td] <= sum{n in NETWORK_TYPE[i]} Transfer_capacity [c2,c1,i,n];
-subject to capacity_limit_exp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, h in HOURS, td in TYPICAL_DAYS} :
-	Exch_exp[c1,c2,i,h,td] <= sum{n in NETWORK_TYPE[i]} Transfer_capacity [c1,c2,i,n];
-subject to transfer_capacity_bounds {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R diff {"GAS"}, n in NETWORK_TYPE[i]}:
+subject to network_capacity_limit_imp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, h in HOURS, td in TYPICAL_DAYS} :
+    Exch_network_imp[c1,c2,i,h,td] <= sum{n in NETWORK_TYPE[i]} Transfer_capacity[c2,c1,i,n];
+subject to network_capacity_limit_exp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, h in HOURS, td in TYPICAL_DAYS} :
+    Exch_network_exp[c1,c2,i,h,td] <= sum{n in NETWORK_TYPE[i]} Transfer_capacity[c1,c2,i,n];
+subject to transfer_capacity_bounds {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, n in NETWORK_TYPE[i]}:
 	tc_min[c1, c2, i, n] <= Transfer_capacity[c1, c2, i, n] <= tc_max[c1, c2, i, n];
 
 subject to bidirectonal_exchanges {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, n in NETWORK_TYPE[i]}:
 	Transfer_capacity [c1,c2,i,n] = Transfer_capacity [c2,c1,i,n];
-	
+
 # special equations for gas network being retrofitted into hydrogen network
 subject to transfer_capacity_bounds_gas_pipeline {c1 in REGIONS, c2 in REGIONS}:
 	tc_min[c1, c2, "GAS", "GAS_PIPELINE"] <=
@@ -448,31 +513,130 @@ subject to transfer_capacity_bounds_gas_subsea {c1 in REGIONS, c2 in REGIONS}:
 	tc_min[c1, c2, "GAS", "GAS_SUBSEA"] <=
 	Transfer_capacity[c1, c2, "GAS", "GAS_SUBSEA"] + Transfer_capacity[c1, c2, "H2", "H2_SUBSEA_RETRO"] / retro_gas_to_h2
 	<= tc_max[c1, c2, "GAS", "GAS_SUBSEA"];
-	
-# equation to link Transfer_capapcity to equivalent technology
+
+# equation to link Transfer_capacity to equivalent technology
 subject to networks_infra {c1 in REGIONS, i in EXCHANGE_NETWORK_R, n in NETWORK_TYPE[i]}:
 	F[c1, n] >= sum{c2 in REGIONS} (dist[c1, c2] * Transfer_capacity [c1,c2,i,n]/2);
 
-# Freight exchanges (+ eq 25 and 26), computing and adding addtional freight due to exchanges
-subject to freight_of_exchanges_border{c1 in REGIONS, c2 in REGIONS} :
-	Exch_freight_border[c1,c2] = dist[c1,c2] * sum{r in EXCHANGE_FREIGHT_R, t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]}((Exch_imp[c1,c2,r,h,td] + Exch_exp[c1,c2,r,h,td])/lhv[r]);
-subject to freight_of_exchanges{c1 in REGIONS} :
-	Exch_freight[c1] = sum{c2 in REGIONS} Exch_freight_border[c1,c2]/2;
+# Prioritize Network Over Freight
+#subject to conditional_exch_network_imp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, h in HOURS, td in TYPICAL_DAYS}:
+#    Exch_network_imp[c1,c2,i,h,td] =
+#        if Exch_imp[c1,c2,i,h,td] >= sum{n in NETWORK_TYPE[i]} Transfer_capacity[c2,c1,i,n]
+#        then sum{n in NETWORK_TYPE[i]} Transfer_capacity[c2,c1,i,n]
+#        else Exch_network_imp[c1,c2,i,h,td];
 
+#subject to conditional_exch_network_exp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_NETWORK_R, h in HOURS, td in TYPICAL_DAYS}:
+#    Exch_network_exp[c1,c2,i,h,td] =
+#        if Exch_exp[c1,c2,i,h,td] >= sum{n in NETWORK_TYPE[i]} Transfer_capacity[c1,c2,i,n]
+#        then sum{n in NETWORK_TYPE[i]} Transfer_capacity[c1,c2,i,n]
+#        else Exch_network_exp[c1,c2,i,h,td];
+
+#subject to prioritize_network_imp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS} :
+#    Exch_imp[c1,c2,i,h,td] <= (if i in EXCHANGE_NETWORK_R then sum{n in NETWORK_TYPE[i]} Transfer_capacity[c2,c1,i,n] else 0) + Exch_extra_freight_imp[c1,c2,i,h,td];
+
+#subject to prioritize_network_exp {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS} :
+#    Exch_exp[c1,c2,i,h,td] <= (if i in EXCHANGE_NETWORK_R then sum{n in NETWORK_TYPE[i]} Transfer_capacity[c1,c2,i,n] else 0) + Exch_extra_freight_exp[c1,c2,i,h,td];
+
+subject to exch_imp_freight_def {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS} :
+    Exch_extra_freight_imp[c1,c2,i,h,td] >= Exch_imp[c1,c2,i,h,td] -
+        (if i in EXCHANGE_NETWORK_R then sum{n in NETWORK_TYPE[i]} Transfer_capacity[c2,c1,i,n] else 0);
+
+subject to define_exch_extra_freight_imp_ub {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS}:
+    Exch_extra_freight_imp[c1,c2,i,h,td] <= Exch_imp[c1,c2,i,h,td];
+
+subject to exch_imp_freight_def_non_negative {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS} :
+    Exch_extra_freight_imp[c1,c2,i,h,td] >= 0;
+
+subject to exch_exp_freight_def {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS} :
+    Exch_extra_freight_exp[c1,c2,i,h,td] >= Exch_exp[c1,c2,i,h,td] -
+        (if i in EXCHANGE_NETWORK_R then sum{n in NETWORK_TYPE[i]} Transfer_capacity[c1,c2,i,n] else 0);
+
+subject to define_exch_extra_freight_exp_ub {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS}:
+    Exch_extra_freight_exp[c1,c2,i,h,td] <= Exch_exp[c1,c2,i,h,td];
+
+subject to exch_exp_freight_def_non_negative {c1 in REGIONS, c2 in REGIONS, i in EXCHANGE_FREIGHT_R, h in HOURS, td in TYPICAL_DAYS} :
+    Exch_extra_freight_exp[c1,c2,i,h,td] >= 0;
+
+# Freight exchanges (+ eq 25 and 26), computing and adding additional freight due to exchanges
+#subject to freight_of_exchanges_border {c1 in REGIONS, c2 in REGIONS} :
+#    Exch_freight_border[c1,c2] = dist[c1,c2] * sum{r in EXCHANGE_FREIGHT_R, t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]}((Exch_extra_freight_exp[c1,c2,r,h,td]) / lhv[r]);
+
+# Freight exchanges (+ eq 25 and 26), computing and adding additional freight due to exchanges
+subject to freight_of_exchanges_border {c1 in REGIONS, c2 in REGIONS} :
+    Exch_freight_border[c1,c2] = dist[c1,c2] * sum{r in EXCHANGE_FREIGHT_R, t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]}((Exch_extra_freight_imp[c1,c2,r,h,td] + Exch_extra_freight_exp[c1,c2,r,h,td]) / lhv[r]);
+
+# Freight exchanges (+ eq 25 and 26), computing and adding additional freight due to exchanges
+#subject to freight_of_exchanges_border {c1 in REGIONS, c2 in REGIONS} :
+#    Exch_freight_border[c1,c2] = dist[c1,c2] * sum{r in EXCHANGE_FREIGHT_R, t in PERIODS, h in HOUR_OF_PERIOD[t], td in TYPICAL_DAY_OF_PERIOD[t]}((Exch_imp[c1,c2,r,h,td] + Exch_exp[c1,c2,r,h,td] - (if r in EXCHANGE_NETWORK_R then (Exch_network_imp[c1,c2,r,h,td] + Exch_network_exp[c1,c2,r,h,td]) else 0)) / lhv[r]);
+
+# Conditional constraint for regions with positive MOBILITY_FREIGHT input
+subject to limit_exch_freight_positive {c1 in REGIONS: end_uses_input[c1, "MOBILITY_FREIGHT"] > 0} :
+    Exch_freight[c1] <= end_uses_input[c1, "MOBILITY_FREIGHT"] * Share_freight_road[c1];
+
+#subject to limit_exch_freight_positive {c1 in REGIONS: end_uses_input[c1, "MOBILITY_FREIGHT"] > 0} :
+#    Exch_freight[c1] <= 600;
+
+# Constraint for regions with zero MOBILITY_FREIGHT input
+#subject to limit_exch_freight_zero {c1 in REGIONS: end_uses_input[c1, "MOBILITY_FREIGHT"] == 0} :
+#    Exch_freight[c1] <= 1000;
+
+#subject to freight_of_exchanges {c1 in REGIONS} :
+#    Exch_freight[c1] = sum{c2 in REGIONS} Exch_freight_border[c1,c2]/2;
+
+subject to freight_of_exchanges {c1 in REGIONS, c2 in REGIONS} :
+    Exch_freight_border[c1,c2] = Exch_freight_border[c2,c1];
+
+# Constraint to compute Exch_freight for regions in GROUPED_REGIONS
+subject to freight_of_exchanges_grouped {c1 in GROUPED_REGIONS}:
+    Exch_freight[c1] =
+        sum {c2 in GROUPED_REGIONS} Exch_freight_border[c1, c2] / 2
+      + sum {c2 in REGIONS diff GROUPED_REGIONS} (Exch_freight_border[c1, c2] / 2 + Exch_freight_border[c2, c1] / 2)
+      + sum {c2 in REGIONS diff GROUPED_REGIONS, c3 in REGIONS diff GROUPED_REGIONS:
+             (c1, c2) in RELATED_PAIRS} Exch_freight_border[c2, c3] / 2;
+
+#subject to freight_of_exchanges_grouped {c1 in GROUPED_REGIONS}:
+#    Exch_freight[c1] =
+#        sum {c2 in GROUPED_REGIONS} Exch_freight_border[c1, c2]
+#      + sum {c2 in REGIONS diff GROUPED_REGIONS} (Exch_freight_border[c1, c2] + Exch_freight_border[c2, c1])
+#      + sum {c2 in REGIONS diff GROUPED_REGIONS, c3 in REGIONS diff GROUPED_REGIONS:
+#             (c1, c2) in RELATED_PAIRS} Exch_freight_border[c2, c3];
+
+# Constraint to ensure Exch_freight is zero for regions not in GROUPED_REGIONS
+subject to freight_of_exchanges_not_grouped {c1 in REGIONS diff GROUPED_REGIONS}:
+    Exch_freight[c1] = 0;
 
 ## Local networks
 #----------------
 
 # [Eq. 20] Calculation of losses for each end-use demand type (normally for electricity and DHN)
+#subject to network_losses_grouped {c in GROUPED_REGIONS, eut in END_USES_TYPES, h in HOURS, td in TYPICAL_DAYS}:
+#    Network_losses[c, eut, h, td] =
+#    (sum {j in TECHNOLOGIES diff STORAGE_TECH: layers_in_out[j, eut] > 0}
+#        ((layers_in_out[j, eut]) * F_t[c, j, h, td])) * loss_network[eut] +
+#    (sum {i in RESOURCES}
+#        ((layers_in_out[i, eut]) * R_t_exterior[c, i, h, td])) * loss_network[eut];
+
+#subject to network_losses_other {c in REGIONS diff GROUPED_REGIONS, eut in END_USES_TYPES, h in HOURS, td in TYPICAL_DAYS}:
+#    Network_losses[c, eut, h, td] =
+#    (sum {j in TECHNOLOGIES diff STORAGE_TECH: layers_in_out[j, eut] > 0}
+#        ((layers_in_out[j, eut]) * F_t[c, j, h, td])) * loss_network_SA[eut] +
+#    (sum {i in RESOURCES}
+#        ((layers_in_out[i, eut]) * R_t_exterior[c, i, h, td])) * loss_network_SA[eut];
+
+
 subject to network_losses {c in REGIONS, eut in END_USES_TYPES, h in HOURS, td in TYPICAL_DAYS}:
-	Network_losses [c,eut,h,td] = (sum {j in TECHNOLOGIES diff STORAGE_TECH: layers_in_out [j, eut] > 0} ((layers_in_out[j, eut]) * F_t [c, j, h, td])) * loss_network [eut] + (sum {i in RESOURCES: layers_in_out [i, eut] > 0} ((layers_in_out[i, eut]) * R_t_import [c, i, h, td])) * loss_network [eut];
+	Network_losses [c,eut,h,td] = (sum {j in TECHNOLOGIES diff STORAGE_TECH: layers_in_out [j, eut] > 0} ((layers_in_out[j, eut]) * F_t [c, j, h, td])) * loss_network [eut] + (sum {i in RESOURCES} ((layers_in_out[i, eut]) * R_t_exterior[c, i, h, td])) * loss_network [eut];
+
+#subject to network_losses {c in REGIONS, eut in END_USES_TYPES, h in HOURS, td in TYPICAL_DAYS}:
+#    Network_losses[c, eut, h, td] = (-sum {j in TECHNOLOGIES diff STORAGE_TECH: layers_in_out [j, eut] < 0} ((layers_in_out[j, eut]) * F_t [c, j, h, td])) * loss_network [eut] - (End_uses [c, eut, h, td]) * loss_network[eut];
+
+#subject to network_losses {c in REGIONS, eut in END_USES_TYPES, h in HOURS, td in TYPICAL_DAYS}:
+#    Network_losses[c, eut, h, td] = (sum {j in TECHNOLOGIES diff STORAGE_TECH: layers_in_out[j, eut] > 0}(layers_in_out[j, eut] * F_t[c, j, h, td])) * loss_network[eut] + (sum {i in RESOURCES}(layers_in_out[i, eut] * (R_t_local[c, i, h, td] + R_t_exterior[c, i, h, td] - R_t_export[c, i, h, td] + R_t_import[c, i, h, td]))) * loss_network[eut];
 
 # [Eq. 21] 9.4 M€ is the extra investment needed if there is a big deployment of stochastic renewables
 subject to extra_grid{c in REGIONS}:
     F [c,"GRID"] = 1 + (c_grid_extra / c_inv[c,"GRID"]) *( (F [c,"WIND_ONSHORE"]     + F [c,"WIND_OFFSHORE"]     + F [c,"PV_ROOFTOP"]   + F [c,"PV_UTILITY"]   )
 					                                     - (f_min [c,"WIND_ONSHORE"] + f_min [c,"WIND_OFFSHORE"]  + f_min [c,"PV_ROOFTOP"] + f_min [c,"PV_UTILITY"]) );
-
-
 # [Eq. 22] DHN: assigning a cost to the network
 subject to extra_dhn{c in REGIONS}:
 	F [c,"DHN"] = sum {j in TECHNOLOGIES_OF_END_USES_TYPE["HEAT_LOW_T_DHN"]} (F [c,j]);
@@ -521,16 +685,16 @@ subject to EV_storage_min_SOC {c in REGIONS, j in V2G, i in EVs_BATT_OF_V2G[j], 
 
 ## Hydro dams
 #-------------
-subject to storage_level_hydro_dams {c in REGIONS diff RWITHOUTDAM}: 
-	F [c,"DAM_STORAGE"] <= f_min [c,"DAM_STORAGE"] + (f_max [c,"DAM_STORAGE"]-f_min [c,"DAM_STORAGE"]) * (F [c,"HYDRO_DAM"] - f_min [c,"HYDRO_DAM"])/(f_max [c,"HYDRO_DAM"] - f_min [c,"HYDRO_DAM"]);
+#subject to storage_level_hydro_dams {c in REGIONS diff RWITHOUTDAM}:
+#	F [c,"DAM_STORAGE"] <= f_min [c,"DAM_STORAGE"] + (f_max [c,"DAM_STORAGE"]-f_min [c,"DAM_STORAGE"]) * (F [c,"HYDRO_DAM"] - f_min [c,"HYDRO_DAM"])/(f_max [c,"HYDRO_DAM"] - f_min [c,"HYDRO_DAM"]);
 
 # [Eq. 41] Hydro dams can stored the input energy and restore it whenever. Hence, inlet is the input river and outlet is bounded by max capacity
-subject to impose_hydro_dams_inflow {c in REGIONS, h in HOURS, td in TYPICAL_DAYS}: 
-	Storage_in [c, "DAM_STORAGE", "ELECTRICITY", h, td] = F_t [c, "HYDRO_DAM", h, td];
+#subject to impose_hydro_dams_inflow {c in REGIONS, h in HOURS, td in TYPICAL_DAYS}:
+#	Storage_in [c, "DAM_STORAGE", "ELECTRICITY", h, td] = F_t [c, "HYDRO_DAM", h, td];
 
 # [Eq. 42] Hydro dams production is lower than installed F_t capacity:
-subject to limit_hydro_dams_output {c in REGIONS, h in HOURS, td in TYPICAL_DAYS}: 
-	Storage_out [c, "DAM_STORAGE", "ELECTRICITY", h, td] <= F [c,"HYDRO_DAM"];
+#subject to limit_hydro_dams_output {c in REGIONS, h in HOURS, td in TYPICAL_DAYS}:
+#	Storage_out [c, "DAM_STORAGE", "ELECTRICITY", h, td] <= F [c,"HYDRO_DAM"];
 
 
 ## CSP

@@ -6,21 +6,21 @@ import sys
 
 import pandas as pd
 
-sys.path.append('/home/pthiran/EnergyScope_multi_cells/')
+sys.path.append('/home/pjimenez/EnergyScope_multi_cells/')
 from esmc import Esmc
 from esmc.common import eu34_country_code_iso3166_alpha2, CSV_SEPARATOR
 
 # defining cases
 cases = [
     'ref',
-    #'ref_epsilon_onshore_re', 'ref_epsilon_local_biomass' , 'ref_epsilon_elec_grid',
-    'low_demand',
-    #'low_demand_epsilon_onshore_re', 'low_demand_epsilon_local_biomass', 'low_demand_epsilon_elec_grid',
-    'nuc'
-    #, 'nuc_epsilon_onshore_re', 'nuc_epsilon_local_biomass', 'nuc_epsilon_elec_grid'
+    # #'ref_epsilon_onshore_re', 'ref_epsilon_local_biomass' , 'ref_epsilon_elec_grid',
+    # 'low_demand',
+    # #'low_demand_epsilon_onshore_re', 'low_demand_epsilon_local_biomass', 'low_demand_epsilon_elec_grid',
+    # 'nuc'
+    # #, 'nuc_epsilon_onshore_re', 'nuc_epsilon_local_biomass', 'nuc_epsilon_elec_grid'
 ]
 
-costs_opt = {'ref': 1534711.614, 'low_demand': 1090425.704, 'nuc': 1535076.406}
+# costs_opt = {'ref': 1534711.614, 'low_demand': 1090425.704, 'nuc': 1535076.406}
 
 no_imports = ['GASOLINE', 'DIESEL', 'LFO', 'JET_FUEL', 'GAS', 'COAL', 'H2', 'AMMONIA', 'METHANOL']
 
@@ -81,7 +81,7 @@ for c in cases:
 
     # according to scenario change some inputs
     if c.startswith('low_demand'):
-        obj = costs_opt['low_demand']
+        # obj = costs_opt['low_demand']
         # read low demand
         ld_all = pd.read_csv(my_model.project_dir / 'Data' / 'exogenous_data' / 'regions' / 'Low_demands_2050.csv',
                              header=0, index_col=[0, 1], sep=CSV_SEPARATOR) * 1000
@@ -92,7 +92,7 @@ for c in cases:
             region.data['Misc']['share_short_haul_flights_min'] = 0
             region.data['Misc']['share_short_haul_flights_max'] = 1e-4
     elif c.startswith('nuc'):
-        obj = costs_opt['nuc']
+        # obj = costs_opt['nuc']
         # read nuclear projections
         nuc_all = pd.read_csv(my_model.project_dir / 'Data' / 'exogenous_data' / 'regions' / 'nuclear_2050.csv',
                               header=0, index_col=0, sep=CSV_SEPARATOR)
@@ -100,8 +100,8 @@ for c in cases:
             # force to install nuclear
             region.data['Technologies'].loc['NUCLEAR_SMR', 'f_min'] = nuc_all.loc[r_code, 'Nuclear']
             region.data['Technologies'].loc['NUCLEAR_SMR', 'f_max'] = nuc_all.loc[r_code, 'Nuclear'] + 1e-4
-    else:
-        obj = costs_opt['ref']
+    # else:
+        # obj = costs_opt['ref']
 
 
     # for near-optimal space exploration with epsilon optimality
