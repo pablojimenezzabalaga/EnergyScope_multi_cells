@@ -14,8 +14,8 @@ AMPL_SEPARATOR = '\t'
 # defining named_space_id
 named_space_id = {'AT_BE_BG_CH_CZ_DE_DK_EE_ES_FI_FR_GB_GR_HR_HU_IE_IT_LT_LU_LV_NL_PL_PT_RO_SE_SI_SK': 'eu27',
                   'AT_BE_BG_CH_CZ_DE_DK_EE_ES_FI_FR_GB_GR_HR_HU_IE_IT_LT_LU_LV_NL_NO_PL_PT_RO_SE_SI_SK': 'eu28',
-                  'AL_AT_BA_BE_BG_CH_CZ_DE_DK_EE_ES_FI_FR_GB_GR_HR_HU_IE_IT_LT_LU_LV_ME_MK_NL_NO_PL_PT_RO_RS_SE_SI_SK_XK': 'eu34'
-                  }
+                  'AL_AT_BA_BE_BG_CH_CZ_DE_DK_EE_ES_FI_FR_GB_GR_HR_HU_IE_IT_LT_LU_LV_ME_MK_NL_NO_PL_PT_RO_RS_SE_SI_SK_XK': 'eu34',
+                  'BN_BN-IT_BN-YC_CB_CH_LP_OR_PA-NA_PT_SC_SC-AS_SC-CC_SC-CQ_SC-GB_SC-MI_SC-VC_SC-VL_TJ_TJ-BE_TJ-OC': 'BO_SI'}
 
 # defining 2 letter country codes and full country names (ISO3166_alpha2)
 eu27_country_code = ['AT', 'BE', 'BG', 'CH', 'CZ',
@@ -73,6 +73,16 @@ eu34_full_names = ['Albania', 'Austria', 'Bosnia and Herzegovina', 'Belgium', 'B
                    'Netherlands', 'Norway', 'Poland', 'Portugal',
                    'Romania', 'Serbia', 'Sweden', 'Slovenia', 'Slovakia',
                    'United Kingdom', 'Kosovo']
+
+# Defining codes for Bolivia (HASC code)
+bo_si_code = ['BN', 'BN-IT', 'BN-YC', 'CB', 'CH', 'LP', 'OR',
+           'PA-NA', 'PT', 'SC', 'SC-AS', 'SC-CC', 'SC-CQ',
+           'SC-GB', 'SC-MI', 'SC-VC', 'SC-VL', 'TJ', 'TJ-BE',
+           'TJ-OC']                                   
+bo_si_full_names = ['Beni', 'Sistema Iténez', 'Sistema Yacuma', 'Cochabamba', 'Chuquisaca', 'La Paz', 'Oruro',
+                 'Sistema Norte Amazónico', 'Potosí', 'Santa Cruz', 'Sistema San Matías', 'Sistema Charagua Camiri', 'Sistema Chiquitos',
+                 'Sistema Germán Busch', 'Sistema Misiones', 'Sistema Valles Cruceños', 'Sistema San Ignacio de Velasco', 'Tarija', 'Sistema Bermejo',
+                 'Sistema Tarija Entre Ríos']
 
 # dictionnary for plotting
 color_dict = {
